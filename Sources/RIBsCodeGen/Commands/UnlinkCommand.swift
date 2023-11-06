@@ -30,12 +30,6 @@ struct UnlinkCommand: Command {
         var result: Result?
         
         do {
-            try deleteComponentExtensions(for: parentName)
-        } catch {
-            result = .failure(error: .failedToUnlink("Failed to delete Component Extension file."))
-        }
-        
-        do {
             try deleteRelatedCodesInParentBuilder(for: parentName)
         } catch {
             result = .failure(error: .failedToUnlink("Failed to delete related codes in parent Builder file."))
@@ -59,17 +53,6 @@ struct UnlinkCommand: Command {
 
 // MARK: - Operations
 private extension UnlinkCommand {
-    func deleteComponentExtensions(for parentName: String) throws {
-        print("\n\tDelete Component Extension file.".bold)
-        let targetFileName = "\(parentName)/Dependencies/\(parentName)Component+\(targetName).swift"
-        guard let componentExtensionFilePath = paths.filter({ $0.contains(targetFileName) }).first else {
-            print("Not found \(targetFileName). Skip to delete Component Extension files.".yellow.bold)
-            return
-        }
-        
-        try delete(path: componentExtensionFilePath)
-    }
-    
     func deleteRelatedCodesInParentBuilder(for parentName: String) throws {
         print("\n\tDelete related codes in \(parentName)Builder.swift.".bold)
         let targetFileName = "/\(parentName)/\(parentName)Builder.swift"

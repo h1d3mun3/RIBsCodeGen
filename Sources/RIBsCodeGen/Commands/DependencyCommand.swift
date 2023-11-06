@@ -115,7 +115,6 @@ private extension DependencyCommand {
 
     func resolveDependencyForBuilder() -> Result {
         do {
-            try addChildDependency(parentBuilderPath: parentBuilderPath)
             try addChildBuilderInitialize(parentBuilderPath: parentBuilderPath)
             try addChildBuilderToRouterInit(parentBuilderPath: parentBuilderPath)
         } catch {
@@ -260,35 +259,6 @@ private extension DependencyCommand {
 
 // MARK: - Private methods for Builder
 private extension DependencyCommand {
-    func addChildDependency(parentBuilderPath: String) throws {
-        print("  Adding child dependency to parent Dependency.")
-        let parentBuilderFile = File(path: parentBuilderPath)!
-        let parentBuilderFileStructure = try Structure(file: parentBuilderFile)
-
-        let parentBuilderProtocols = parentBuilderFileStructure.dictionary
-            .getSubStructures()
-            .filterByKeyKind(.protocol)
-
-        guard let parentBuilderDependency = parentBuilderProtocols.filterByKeyName("\(parent)Dependency").first else {
-            print("Not found protocol \(parent)Dependency.".red.bold)
-            throw Error.failedToAddChildBuilder
-        }
-
-        let shouldAddDependency = parentBuilderDependency.getInheritedTypes().filterByKeyName("\(parent)Dependency\(child)").isEmpty
-
-        guard shouldAddDependency else {
-            print("  Skip to add \(parent)Dependency\(child).".yellow)
-            return
-        }
-
-        let insertPosition = parentBuilderDependency.getInnerLeadingPosition() - 2// TODO: 準拠している Protocol の最後の末尾を起点にしたほうがよい
-
-        var text = try String.init(contentsOfFile: parentBuilderPath, encoding: .utf8)
-        let dependencyInsertIndex = text.utf8.index(text.startIndex, offsetBy: insertPosition)
-        text.insert(contentsOf: ",\n\("\(parent)Dependency\(child)")", at: dependencyInsertIndex)
-        write(text: text, toPath: parentBuilderPath)
-    }
-
     func addChildBuilderInitialize(parentBuilderPath: String) throws {
         print("  Adding child builder initialize to parent Builder.")
         let parentBuilderFile = File(path: parentBuilderPath)!

@@ -51,15 +51,10 @@ func run(with commandLineArguments: [String]) {
         let resultCreateRIB = makeCreateRIBCommand(argument: argument).run()
         showResult(resultCreateRIB)
 
-        let resultCreateComponentExtension = makeCreateComponentExtension(argument: argument).run()
-        showResult(resultCreateComponentExtension)
-
         let resultDependency = makeDependencyCommand(argument: argument).run()
         showResult(resultDependency)
         exit(0)
     case .link:
-        let resultCreateComponentExtension = makeCreateComponentExtension(argument: argument).run()
-        showResult(resultCreateComponentExtension)
 
         let resultDependency = makeDependencyCommand(argument: argument).run()
         showResult(resultDependency)
@@ -69,9 +64,6 @@ func run(with commandLineArguments: [String]) {
         edges.forEach { edge in
             let resultCreateRIB = makeCreateRIBCommand(edge: edge).run()
             showResult(resultCreateRIB)
-
-            let resultCreateComponentExtension = makeCreateComponentExtension(edge: edge).run()
-            showResult(resultCreateComponentExtension)
 
             let resultDependency = makeDependencyCommand(edge: edge).run()
             showResult(resultDependency)
@@ -251,22 +243,6 @@ func makeCreateRIBCommand(edge: Edge) -> Command {
                             setting: setting,
                             target: edge.target,
                             isOwnsView: edge.isOwnsView)
-}
-
-func makeCreateComponentExtension(argument: Argument) -> Command {
-    let paths = allSwiftSourcePaths(directoryPath: setting.targetDirectory)
-    return CreateComponentExtension(paths: paths,
-                                    setting: setting,
-                                    parent: argument.parent,
-                                    child: argument.actionTarget)
-}
-
-func makeCreateComponentExtension(edge: Edge) -> Command {
-    let paths = allSwiftSourcePaths(directoryPath: setting.targetDirectory)
-    return CreateComponentExtension(paths: paths,
-                                    setting: setting,
-                                    parent: edge.parent,
-                                    child: edge.target)
 }
 
 func makeDependencyCommand(argument: Argument) -> Command {
