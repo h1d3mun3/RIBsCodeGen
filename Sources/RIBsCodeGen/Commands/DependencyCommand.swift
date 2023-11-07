@@ -115,6 +115,7 @@ private extension DependencyCommand {
 
     func resolveDependencyForBuilder() -> Result {
         do {
+            try addChildBuilderInstance(parentBuilderPath: parentBuilderPath)
             try addChildBuilderInitialize(parentBuilderPath: parentBuilderPath)
             try addChildBuilderToRouterInit(parentBuilderPath: parentBuilderPath)
         } catch {
@@ -259,6 +260,30 @@ private extension DependencyCommand {
 
 // MARK: - Private methods for Builder
 private extension DependencyCommand {
+    func addChildBuilderInstance(parentBuilderPath: String) throws {
+        print("  Adding child builder instance to parent Component.")
+        let parentBuilderFile = File(path: parentBuilderPath)!
+        let parentBuilderFileStructure = try Structure(file: parentBuilderFile)
+
+        let parentBuilderClasses = parentBuilderFileStructure.dictionary
+            .getSubStructures()
+            .filterByKeyKind(.class)
+
+        guard let parentComponentClass = parentBuilderClasses.filterByKeyName("\(parent)Component").first else {
+            print("  Not found \(parent)Component class.".red.bold)
+            throw Error.failedToAddChildBuilder
+        }
+
+        let insertPosition = parentComponentClass.getInnerTrailingPosition()
+
+        var text = try String.init(contentsOfFile: parentBuilderPath, encoding: .utf8)
+
+        let dependencyInsertIndex = text.utf8.index(text.startIndex, offsetBy: insertPosition)
+        
+        text.insert(contentsOf: "var \(child.lowercasedFirstLetter())Component: \(child)Component {\n\(child)Component(parent: self)\n}\n", at: dependencyInsertIndex)
+        write(text: text, toPath: parentBuilderPath)
+    }
+
     func addChildBuilderInitialize(parentBuilderPath: String) throws {
         print("  Adding child builder initialize to parent Builder.")
         let parentBuilderFile = File(path: parentBuilderPath)!
@@ -304,7 +329,7 @@ private extension DependencyCommand {
         var text = try String.init(contentsOfFile: parentBuilderPath, encoding: .utf8)
 
         let dependencyInsertIndex = text.utf8.index(text.startIndex, offsetBy: insertPosition)
-        text.insert(contentsOf: "let \(child.lowercasedFirstLetter())Builder = \(child)Builder(dependency: component)\n", at: dependencyInsertIndex)
+        text.insert(contentsOf: "let \(child.lowercasedFirstLetter())Builder = \(child)Builder { component.\(child.lowercasedFirstLetter())Component }\n", at: dependencyInsertIndex)
         write(text: text, toPath: parentBuilderPath)
     }
 
