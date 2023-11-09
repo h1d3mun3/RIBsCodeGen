@@ -280,37 +280,16 @@ private extension DependencyCommand {
 
         let dependencyInsertIndex = text.utf8.index(text.startIndex, offsetBy: insertPosition)
         
-        // 子Componentがinitを持っているか（かつ引数を取得できるか）どうかを判定する
-        let childBuilderFile = File(path: childBuilderPath)!
-        let childBuilderFileStructure = try Structure(file: childBuilderFile)
-        let childBuilderClasses = childBuilderFileStructure.dictionary.getSubStructures().filterByKeyKind(.class)
-        
-        guard let childComponentClass = childBuilderClasses.filterByKeyName("\(child)Component").first else {
-            print("  Not found \(child)Component class.".red.bold)
-            throw Error.failedToAddChildBuilder
-        }
-
-        let initArguments = getChildComponentInitArguments(childComponentClass: childComponentClass)
+        let initArguments = try getChildComponentInitArguments(childBuilderPath: childBuilderPath)
         if initArguments.isEmpty {
             text.insert(contentsOf: "var \(child.lowercasedFirstLetter())Component: \(child)Component {\n\(child)Component(parent: self)\n}\n", at: dependencyInsertIndex)
         } else {
-            let arguments = initArguments.map { "\($0.name): \($0.type)" }.first!
+            let arguments = initArguments.map { "\($0.name): \($0.type)" }.joined(separator: ", ")
             let innerArguments = initArguments.map { $0.name }.map { "\($0): \($0)" }.joined(separator: ", ")
             text.insert(contentsOf: "func \(child.lowercasedFirstLetter())Component(\(arguments)) -> \(child)Component {\n\(child)Component(parent: self, \(innerArguments))\n}\n", at: dependencyInsertIndex)
         }
 
         write(text: text, toPath: parentBuilderPath)
-    }
-
-    private func getChildComponentInitArguments(childComponentClass: [String: SourceKitRepresentable]) -> [(name: String, type: String)] {
-        let initStructure = childComponentClass.getSubStructures().extractDictionaryContainsKeyName("init")
-        let attributes = initStructure.getAttributes()
-        let initArguments = initStructure.getSubStructures().filterByKeyKind(.varParameter)
-        let childComponentArguments = initArguments
-            .filter { $0.getKeyName() != "parent" }
-            .map { (name: $0.getKeyName(), type: $0.getTypeName()) }
-        
-        return childComponentArguments
     }
 
     func addChildBuilderInitialize(parentBuilderPath: String) throws {
@@ -358,8 +337,36 @@ private extension DependencyCommand {
         var text = try String.init(contentsOfFile: parentBuilderPath, encoding: .utf8)
 
         let dependencyInsertIndex = text.utf8.index(text.startIndex, offsetBy: insertPosition)
-        text.insert(contentsOf: "let \(child.lowercasedFirstLetter())Builder = \(child)Builder { component.\(child.lowercasedFirstLetter())Component }\n", at: dependencyInsertIndex)
+        
+        let initArguments = try getChildComponentInitArguments(childBuilderPath: childBuilderPath)
+        if initArguments.isEmpty {
+            text.insert(contentsOf: "let \(child.lowercasedFirstLetter())Builder = \(child)Builder { component.\(child.lowercasedFirstLetter())Component }\n", at: dependencyInsertIndex)
+        } else {
+            let arguments = initArguments.map { $0.name }.joined(separator: ", ")
+            let innerArguments = initArguments.map { $0.name }.map { "\($0): \($0)" }.joined(separator: ", ")
+            text.insert(contentsOf: "let \(child.lowercasedFirstLetter())Builder = \(child)Builder { \(arguments) in\n component.\(child.lowercasedFirstLetter())Component(\(innerArguments))\n}\n", at: dependencyInsertIndex)
+        }
+
         write(text: text, toPath: parentBuilderPath)
+    }
+    
+    private func getChildComponentInitArguments(childBuilderPath: String) throws -> [(name: String, type: String)] {
+        let childBuilderFile = File(path: childBuilderPath)!
+        let childBuilderFileStructure = try Structure(file: childBuilderFile)
+        let childBuilderClasses = childBuilderFileStructure.dictionary.getSubStructures().filterByKeyKind(.class)
+        
+        guard let childComponentClass = childBuilderClasses.filterByKeyName("\(child)Component").first else {
+            print("  Not found \(child)Component class.".red.bold)
+            throw Error.failedToAddChildBuilder
+        }
+        
+        let initStructure = childComponentClass.getSubStructures().extractDictionaryContainsKeyName("init")
+        let initArguments = initStructure.getSubStructures().filterByKeyKind(.varParameter)
+        let childComponentArguments = initArguments
+            .filter { $0.getKeyName() != "parent" }
+            .map { (name: $0.getKeyName(), type: $0.getTypeName()) }
+        
+        return childComponentArguments
     }
 
     func addChildBuilderToRouterInit(parentBuilderPath: String) throws {
