@@ -52,7 +52,7 @@ final class RenameCommand: Command {
     private let builderPath: String
     private let viewControllerPath: String?
     private let currentDependenciesPath: [String]
-    private let parents: [String]
+    private var parents: [String] = []
     
     private var replacedFilePaths = [String]()
     
@@ -83,14 +83,6 @@ final class RenameCommand: Command {
         self.builderPath = builderPath
         viewControllerPath = paths.filter({ $0.contains("/" + currentName + "ViewController.swift") }).first
         currentDependenciesPath = paths.filter({ $0.contains("/" + currentName + "/Dependencies/") })
-    
-        parents = paths
-            .filter({ $0.contains("Component+\(currentName).swift") })
-            .flatMap { $0.split(separator: "/") }
-            .filter({ $0.contains("Component+\(currentName).swift") })
-            .compactMap { $0.split(separator: "+").first }
-            .map { $0.dropLast("Component".count) }
-            .map { String($0) }
     }
     
     func run() -> Result {
@@ -99,6 +91,9 @@ final class RenameCommand: Command {
         var result: Result?
     
         print("\n\tStart renaming codes for related files.".bold)
+
+        getParents()
+
         do {
             try renameForInteractor()
         } catch {
@@ -159,6 +154,35 @@ final class RenameCommand: Command {
 
 // MARK: - Run
 private extension RenameCommand {
+    func getParents() {
+        parents = paths
+            .filter({ $0.contains("Builder.swift") })
+            .filter({ $0.lastElementSplittedBySlash != "\(currentName)Builder.swift" })
+            .filter({ [weak self] builderFilePath in
+                self?.hasChildConponent(parentBuilderPath: builderFilePath) ?? false
+            })
+            .map { $0.lastElementSplittedBySlash }
+            .map { $0.dropLast("Builder.swift".count) }
+            .map { String($0) }
+    }
+    
+    func hasChildConponent(parentBuilderPath: String) -> Bool {
+        let parentBuilderFile = File(path: parentBuilderPath)!
+        let parentBuilderFileStructure = try! Structure(file: parentBuilderFile)
+        print(parentBuilderPath.lastElementSplittedBySlash)
+        var parent = parentBuilderPath.lastElementSplittedBySlash
+        parent.removeLast("Builder.swift".count)
+        
+        let parentBuilderClasses = parentBuilderFileStructure.dictionary.getSubStructures().filterByKeyKind(.class)
+        
+        if let parentComponentClass = parentBuilderClasses.filterByKeyName("\(parent)Component").first,
+           let _ = parentComponentClass.getSubStructures().filterByKeyTypeName("\(currentName)Component").first  {
+            return true
+        } else {
+            return false
+        }
+    }
+    
     func renameForInteractor() throws {
         print("\t\trename for \(interactorPath.lastElementSplittedBySlash)")
         let text = try String.init(contentsOfFile: interactorPath, encoding: .utf8)

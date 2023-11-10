@@ -350,7 +350,7 @@ private extension DependencyCommand {
         write(text: text, toPath: parentBuilderPath)
     }
     
-    private func getChildComponentInitArguments(childBuilderPath: String) throws -> [(name: String, type: String)] {
+    func getChildComponentInitArguments(childBuilderPath: String) throws -> [(name: String, type: String)] {
         let childBuilderFile = File(path: childBuilderPath)!
         let childBuilderFileStructure = try Structure(file: childBuilderFile)
         let childBuilderClasses = childBuilderFileStructure.dictionary.getSubStructures().filterByKeyKind(.class)
