@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SourceKittenFramework
 import PathKit
 import Yams
 
@@ -94,11 +95,26 @@ func run(with commandLineArguments: [String]) {
         let targetName = argument.actionTarget
         let paths = allSwiftSourcePaths(directoryPath: setting.targetDirectory)
         let parents = paths
-            .filter({ $0.contains("Component+\(targetName).swift") })
-            .flatMap { $0.split(separator: "/") }
-            .filter({ $0.contains("Component+\(targetName).swift") })
-            .compactMap { $0.split(separator: "+").first }
-            .map { $0.dropLast("Component".count) }
+            .filter({ $0.contains("Builder.swift") })
+            .filter({ $0.lastElementSplittedBySlash != "\(targetName)Builder.swift" })
+            .filter({ builderFilePath in
+                let parentBuilderFile = File(path: builderFilePath)!
+                let parentBuilderFileStructure = try! Structure(file: parentBuilderFile)
+                print(builderFilePath.lastElementSplittedBySlash)
+                var parent = builderFilePath.lastElementSplittedBySlash
+                parent.removeLast("Builder.swift".count)
+                
+                let parentBuilderClasses = parentBuilderFileStructure.dictionary.getSubStructures().filterByKeyKind(.class)
+                
+                if let parentComponentClass = parentBuilderClasses.filterByKeyName("\(parent)Component").first,
+                   let _ = parentComponentClass.getSubStructures().filterByKeyTypeName("\(targetName)Component").first  {
+                    return true
+                } else {
+                    return false
+                }
+            })
+            .map { $0.lastElementSplittedBySlash }
+            .map { $0.dropLast("Builder.swift".count) }
             .map { String($0) }
         parents.forEach { parentName in
             let resultUnlink = makeUnlink(targetName: targetName, parentName: parentName, unlinkSetting: unlinkSetting).run()
@@ -111,6 +127,12 @@ func run(with commandLineArguments: [String]) {
         let result = HelpCommand().run()
         showResult(result)
         exit(0)
+    }
+}
+
+private extension String {
+    var lastElementSplittedBySlash: String {
+        String(self.split(separator: "/").last ?? "")
     }
 }
 
