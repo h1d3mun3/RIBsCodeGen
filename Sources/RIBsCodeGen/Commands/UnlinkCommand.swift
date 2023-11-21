@@ -20,11 +20,6 @@ struct UnlinkCommand: Command {
     }
     
     func run() -> Result {
-        guard !paths.filter({ $0.contains("/\(parentName)Component+\(targetName).swift") }).isEmpty else {
-            print("\(parentName)Component+\(targetName).swift file is not found. Please check the target and parent RIB name.".red.bold)
-            return .failure(error: .unknown) // TODO: 正しいエラー
-        }
-        
         print("\nStart unlinking \(targetName) RIB from \(parentName) RIB.".bold)
         
         var result: Result?
@@ -79,16 +74,10 @@ private extension UnlinkCommand {
             print("Skip to delete related codes in \(parentName)Builder.swift".yellow.bold)
             return
         }
-    
+        
         let text = try String.init(contentsOfFile: builderFilePath, encoding: .utf8)
-        var replacedText = ""
-        if inheritedTypes.count == 1 {
-            print("\t\t\(parentName)Dependency conforms to only one protocol, replace '\(parentName)Dependency\(targetName)' with 'Dependency'".yellow)
-            replacedText = text.replacingOccurrences(of: "\(parentName)Dependency\(targetName)", with: "Dependency")
-        } else {
-            replacedText = text
-        }
-    
+        var replacedText = text
+        
         replacedText = unlinkSetting.parentBuilder.reduce(replacedText) { (result, builderSearchText) in
             let searchText = replacePlaceHolder(for: builderSearchText, with: targetName, and: parentName)
             print("\t\tdelete codes matching with " + "\(searchText)".lightBlack + ".")
