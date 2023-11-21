@@ -21,13 +21,13 @@ func main() {
     print(startMessage)
     
     let arguments = [String](CommandLine.arguments.dropFirst())
-    guard let setting = analyzeSettings() else {
+    guard let analyzeSettings = analyzeSettings() else {
         print("")
         print("\nRIBsCodeGen operation failed. Check the above error logs.".red)
         print("")
         exit(1)
     }
-    RIBsCodeGen.setting = setting
+    setting = analyzeSettings
 
     run(with: arguments)
 }
