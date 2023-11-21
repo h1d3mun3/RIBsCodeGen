@@ -340,7 +340,7 @@ private extension DependencyCommand {
         
         let initArguments = try getChildComponentInitArguments(childBuilderPath: childBuilderPath)
         if initArguments.isEmpty {
-            text.insert(contentsOf: "let \(child.lowercasedFirstLetter())Builder = \(child)Builder { component.\(child.lowercasedFirstLetter())Component }\n", at: dependencyInsertIndex)
+            text.insert(contentsOf: "let \(child.lowercasedFirstLetter())Builder = \(child)Builder {\n component.\(child.lowercasedFirstLetter())Component\n}\n", at: dependencyInsertIndex)
         } else {
             let arguments = initArguments.map { $0.name }.joined(separator: ", ")
             let innerArguments = initArguments.map { $0.name }.map { "\($0): \($0)" }.joined(separator: ", ")
