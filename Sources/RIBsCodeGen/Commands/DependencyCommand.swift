@@ -115,7 +115,7 @@ private extension DependencyCommand {
 
     func resolveDependencyForBuilder() -> Result {
         do {
-            try addChildBuilderInstance(parentBuilderPath: parentBuilderPath)
+            try addChildComponentInitialize(parentBuilderPath: parentBuilderPath)
             try addChildBuilderInitialize(parentBuilderPath: parentBuilderPath)
             try addChildBuilderToRouterInit(parentBuilderPath: parentBuilderPath)
         } catch {
@@ -260,7 +260,7 @@ private extension DependencyCommand {
 
 // MARK: - Private methods for Builder
 private extension DependencyCommand {
-    func addChildBuilderInstance(parentBuilderPath: String) throws {
+    func addChildComponentInitialize(parentBuilderPath: String) throws {
         print("  Adding child builder instance to parent Component.")
         let parentBuilderFile = File(path: parentBuilderPath)!
         let parentBuilderFileStructure = try Structure(file: parentBuilderFile)
