@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SourceKittenFramework
 import PathKit
 import Yams
 
@@ -21,13 +22,13 @@ func main() {
     print(startMessage)
     
     let arguments = [String](CommandLine.arguments.dropFirst())
-    guard let setting = analyzeSettings() else {
+    guard let analyzeSettings = analyzeSettings() else {
         print("")
         print("\nRIBsCodeGen operation failed. Check the above error logs.".red)
         print("")
         exit(1)
     }
-    RIBsCodeGen.setting = setting
+    setting = analyzeSettings
 
     run(with: arguments)
 }
@@ -51,15 +52,10 @@ func run(with commandLineArguments: [String]) {
         let resultCreateRIB = makeCreateRIBCommand(argument: argument).run()
         showResult(resultCreateRIB)
 
-        let resultCreateComponentExtension = makeCreateComponentExtension(argument: argument).run()
-        showResult(resultCreateComponentExtension)
-
         let resultDependency = makeDependencyCommand(argument: argument).run()
         showResult(resultDependency)
         exit(0)
     case .link:
-        let resultCreateComponentExtension = makeCreateComponentExtension(argument: argument).run()
-        showResult(resultCreateComponentExtension)
 
         let resultDependency = makeDependencyCommand(argument: argument).run()
         showResult(resultDependency)
@@ -69,9 +65,6 @@ func run(with commandLineArguments: [String]) {
         edges.forEach { edge in
             let resultCreateRIB = makeCreateRIBCommand(edge: edge).run()
             showResult(resultCreateRIB)
-
-            let resultCreateComponentExtension = makeCreateComponentExtension(edge: edge).run()
-            showResult(resultCreateComponentExtension)
 
             let resultDependency = makeDependencyCommand(edge: edge).run()
             showResult(resultDependency)
@@ -102,11 +95,26 @@ func run(with commandLineArguments: [String]) {
         let targetName = argument.actionTarget
         let paths = allSwiftSourcePaths(directoryPath: setting.targetDirectory)
         let parents = paths
-            .filter({ $0.contains("Component+\(targetName).swift") })
-            .flatMap { $0.split(separator: "/") }
-            .filter({ $0.contains("Component+\(targetName).swift") })
-            .compactMap { $0.split(separator: "+").first }
-            .map { $0.dropLast("Component".count) }
+            .filter({ $0.contains("Builder.swift") })
+            .filter({ $0.lastElementSplittedBySlash != "\(targetName)Builder.swift" })
+            .filter({ builderFilePath in
+                let parentBuilderFile = File(path: builderFilePath)!
+                let parentBuilderFileStructure = try! Structure(file: parentBuilderFile)
+                print(builderFilePath.lastElementSplittedBySlash)
+                var parent = builderFilePath.lastElementSplittedBySlash
+                parent.removeLast("Builder.swift".count)
+                
+                let parentBuilderClasses = parentBuilderFileStructure.dictionary.getSubStructures().filterByKeyKind(.class)
+                
+                if let parentComponentClass = parentBuilderClasses.filterByKeyName("\(parent)Component").first,
+                   let _ = parentComponentClass.getSubStructures().filterByKeyTypeName("\(targetName)Component").first  {
+                    return true
+                } else {
+                    return false
+                }
+            })
+            .map { $0.lastElementSplittedBySlash }
+            .map { $0.dropLast("Builder.swift".count) }
             .map { String($0) }
         parents.forEach { parentName in
             let resultUnlink = makeUnlink(targetName: targetName, parentName: parentName, unlinkSetting: unlinkSetting).run()
@@ -119,6 +127,12 @@ func run(with commandLineArguments: [String]) {
         let result = HelpCommand().run()
         showResult(result)
         exit(0)
+    }
+}
+
+private extension String {
+    var lastElementSplittedBySlash: String {
+        String(self.split(separator: "/").last ?? "")
     }
 }
 
@@ -251,22 +265,6 @@ func makeCreateRIBCommand(edge: Edge) -> Command {
                             setting: setting,
                             target: edge.target,
                             isOwnsView: edge.isOwnsView)
-}
-
-func makeCreateComponentExtension(argument: Argument) -> Command {
-    let paths = allSwiftSourcePaths(directoryPath: setting.targetDirectory)
-    return CreateComponentExtension(paths: paths,
-                                    setting: setting,
-                                    parent: argument.parent,
-                                    child: argument.actionTarget)
-}
-
-func makeCreateComponentExtension(edge: Edge) -> Command {
-    let paths = allSwiftSourcePaths(directoryPath: setting.targetDirectory)
-    return CreateComponentExtension(paths: paths,
-                                    setting: setting,
-                                    parent: edge.parent,
-                                    child: edge.target)
 }
 
 func makeDependencyCommand(argument: Argument) -> Command {

@@ -52,7 +52,7 @@ final class RenameCommand: Command {
     private let builderPath: String
     private let viewControllerPath: String?
     private let currentDependenciesPath: [String]
-    private let parents: [String]
+    private var parents: [String] = []
     
     private var replacedFilePaths = [String]()
     
@@ -83,14 +83,6 @@ final class RenameCommand: Command {
         self.builderPath = builderPath
         viewControllerPath = paths.filter({ $0.contains("/" + currentName + "ViewController.swift") }).first
         currentDependenciesPath = paths.filter({ $0.contains("/" + currentName + "/Dependencies/") })
-    
-        parents = paths
-            .filter({ $0.contains("Component+\(currentName).swift") })
-            .flatMap { $0.split(separator: "/") }
-            .filter({ $0.contains("Component+\(currentName).swift") })
-            .compactMap { $0.split(separator: "+").first }
-            .map { $0.dropLast("Component".count) }
-            .map { String($0) }
     }
     
     func run() -> Result {
@@ -99,6 +91,9 @@ final class RenameCommand: Command {
         var result: Result?
     
         print("\n\tStart renaming codes for related files.".bold)
+
+        getParents()
+
         do {
             try renameForInteractor()
         } catch {
@@ -124,12 +119,6 @@ final class RenameCommand: Command {
         }
     
         do {
-            try renameForDependencies()
-        } catch {
-            result = .failure(error: .failedToRename("Failed to rename operation for target Dependencies."))
-        }
-    
-        do {
             try renameForParentsInteractor()
         } catch {
             result = .failure(error: .failedToRename("Failed to rename operation for target parent Interactor."))
@@ -148,12 +137,6 @@ final class RenameCommand: Command {
         }
     
         do {
-            try renameForParentsComponentExtensions()
-        } catch {
-            result = .failure(error: .failedToRename("Failed to rename operation for target parent Component Extensions."))
-        }
-        
-        do {
             try formatAllReplacedFiles()
         } catch {
             result = .failure(error: .failedFormat)
@@ -171,6 +154,35 @@ final class RenameCommand: Command {
 
 // MARK: - Run
 private extension RenameCommand {
+    func getParents() {
+        parents = paths
+            .filter({ $0.contains("Builder.swift") })
+            .filter({ $0.lastElementSplittedBySlash != "\(currentName)Builder.swift" })
+            .filter({ [weak self] builderFilePath in
+                self?.hasChildConponent(parentBuilderPath: builderFilePath) ?? false
+            })
+            .map { $0.lastElementSplittedBySlash }
+            .map { $0.dropLast("Builder.swift".count) }
+            .map { String($0) }
+    }
+    
+    func hasChildConponent(parentBuilderPath: String) -> Bool {
+        let parentBuilderFile = File(path: parentBuilderPath)!
+        let parentBuilderFileStructure = try! Structure(file: parentBuilderFile)
+        print(parentBuilderPath.lastElementSplittedBySlash)
+        var parent = parentBuilderPath.lastElementSplittedBySlash
+        parent.removeLast("Builder.swift".count)
+        
+        let parentBuilderClasses = parentBuilderFileStructure.dictionary.getSubStructures().filterByKeyKind(.class)
+        
+        if let parentComponentClass = parentBuilderClasses.filterByKeyName("\(parent)Component").first,
+           let _ = parentComponentClass.getSubStructures().filterByKeyTypeName("\(currentName)Component").first  {
+            return true
+        } else {
+            return false
+        }
+    }
+    
     func renameForInteractor() throws {
         print("\t\trename for \(interactorPath.lastElementSplittedBySlash)")
         let text = try String.init(contentsOfFile: interactorPath, encoding: .utf8)
@@ -223,21 +235,6 @@ private extension RenameCommand {
         
         try Path(viewControllerPath).write(replacedText)
         replacedFilePaths.append(viewControllerPath)
-    }
-    
-    func renameForDependencies() throws {
-        try currentDependenciesPath.forEach { dependencyPath in
-            print("\t\trename for \(dependencyPath.lastElementSplittedBySlash)")
-            let text = try String.init(contentsOfFile: dependencyPath, encoding: .utf8)
-            let replacedText = renameSetting.componentExtension.reduce(text) { (result, componentExtensionSearchText) in
-                let searchText = replacePlaceHolder(for: componentExtensionSearchText, with: currentName)
-                let replaceText = replacePlaceHolder(for: componentExtensionSearchText, with: newName)
-                return result.replacingOccurrences(of: searchText, with: replaceText)
-            }
-            
-            try Path(dependencyPath).write(replacedText)
-            replacedFilePaths.append(dependencyPath)
-        }
     }
     
     func renameForParentsInteractor() throws {
@@ -303,27 +300,6 @@ private extension RenameCommand {
         }
     }
     
-    func renameForParentsComponentExtensions() throws {
-        try parents.forEach { parentName in
-            guard let componentExtensionPath = paths.filter({ $0.contains("\(parentName)/Dependencies/\(parentName)Component+\(currentName).swift") }).first else {
-                print("Not found \(parentName)Component+\(currentName).swift in \(parentName)/Dependencies RIB directory.".red.bold)
-                print("Skip to rename codes in \(parentName)Component+\(currentName).swift.".yellow.bold)
-                return
-            }
-    
-            print("\t\trename for \(componentExtensionPath.lastElementSplittedBySlash)")
-            let text = try String.init(contentsOfFile: componentExtensionPath, encoding: .utf8)
-            let replacedText = renameSetting.parentComponentExtension.reduce(text) { (result, parentComponentExtensionSearchText) in
-                let searchText = replacePlaceHolder(for: parentComponentExtensionSearchText, with: currentName, and: parentName)
-                let replaceText = replacePlaceHolder(for: parentComponentExtensionSearchText, with: newName, and: parentName)
-                return result.replacingOccurrences(of: searchText, with: replaceText)
-            }
-            
-            try Path(componentExtensionPath).write(replacedText)
-            replacedFilePaths.append(componentExtensionPath)
-        }
-    }
-    
     func formatAllReplacedFiles() throws {
         print("\n\tStart format for all replaced files.".bold)
         try replacedFilePaths.forEach { replacedFilePath in
@@ -370,32 +346,6 @@ private extension RenameCommand {
             print("\t\t\t\(newViewControllerPath.relativePath)".lightBlack)
         }
     
-        let targetRIBDependenciesDirectoryPath = try Path(targetRIBDirectoryPath.description + "/Dependencies")
-        if targetRIBDependenciesDirectoryPath.exists {
-            let targetRIBDependencyPaths = try targetRIBDependenciesDirectoryPath.children().map { $0.description }.filter { $0.contains("\(currentName)Component+") }
-        
-            let newDependenciesDirectoryPath = Path(newDirectoryPath.description + "/Dependencies")
-            try newDependenciesDirectoryPath.mkdir()
-            print("\t\tNew directory was created.")
-            print("\t\t\t\(newDirectoryPath.relativePath)".lightBlack)
-        
-            try targetRIBDependencyPaths.forEach { targetRIBDependencyPath in
-                let newDependencyPath = Path(newDependenciesDirectoryPath.description + "/" + targetRIBDependencyPath.lastElementSplittedBySlash.replacingOccurrences(of: "\(currentName)Component+", with: "\(newName)Component+"))
-                try Path(targetRIBDependencyPath).move(newDependencyPath)
-                print("\t\tComponent Extension file was renamed and moved to new directory.")
-                print("\t\t\t\(newDependencyPath.relativePath)".lightBlack)
-            }
-    
-            if try targetRIBDependenciesDirectoryPath.children().isEmpty {
-                try targetRIBDependenciesDirectoryPath.delete()
-                print("\t\t\(currentName)/Dependencies directory was removed because its files no longer exists.")
-                print("\t\t\t\(targetRIBDependenciesDirectoryPath.relativePath)".lightBlack)
-            }
-        } else {
-            print("\t\tNot found Dependencies directory, skip to move Component Extension files".yellow)
-            print("\t\t\t\(targetRIBDependenciesDirectoryPath.relativePath)".lightBlack)
-        }
-        
         if try targetRIBDirectoryPath.children().isEmpty {
             try targetRIBDirectoryPath.delete()
             print("\t\t\(currentName) directory was removed because its files no longer exists.")
@@ -413,20 +363,6 @@ private extension RenameCommand {
             guard parentRIBDirectoryPath.isDirectory else {
                 print("Failed to detect target parent RIB \(parentName) directory path.".red.bold)
                 return
-            }
-    
-            let parentRIBDependenciesDirectoryPath = try Path(parentRIBDirectoryPath.description + "/Dependencies")
-            guard parentRIBDependenciesDirectoryPath.isDirectory else {
-                print("Failed to detect target parent RIB \(parentName) Dependencies directory path.".red.bold)
-                return
-            }
-    
-            let parentRIBDependencyPaths = try parentRIBDependenciesDirectoryPath.children().map { $0.description }.filter { $0.contains("Component+\(currentName).swift") }
-            try parentRIBDependencyPaths.forEach { parentRIBDependencyPath in
-                let newDependencyPath = Path(parentRIBDependenciesDirectoryPath.description + "/" + parentRIBDependencyPath.lastElementSplittedBySlash.replacingOccurrences(of: "Component+\(currentName).swift", with: "Component+\(newName).swift"))
-                try Path(parentRIBDependencyPath).move(newDependencyPath)
-                print("\t\tComponent Extension file was renamed and moved to new directory.")
-                print("\t\t\t\(newDependencyPath.relativePath)".lightBlack)
             }
         }
         
